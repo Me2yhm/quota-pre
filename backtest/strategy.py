@@ -195,12 +195,17 @@ class strategy:
         if self.account.transactions and self.account.pool:
             if yesterday in self.account.transactions.keys():
                 transacton = self.account.transactions[yesterday][-1]
+                symbol = transacton["code"]
+                if symbol in ["IF.CFX", "IH.CFX"]:
+                    multi = 300
+                elif symbol in ["IC.CFX", "IM.CFX"]:
+                    multi = 200
                 old_price = transacton["price"]
                 volume = transacton["volume"]
                 self.account.order(self.code, -volume, current_price)
                 new_volum = self.account.transactions[today][-1]["volume"]
-                returns = -new_volum * current_price
-                pay = volume * old_price
+                returns = -new_volum * current_price * multi
+                pay = volume * old_price * multi
                 intrest = returns - pay
                 if intrest > 0:
                     self.win_times.append(1)
@@ -302,7 +307,10 @@ if __name__ == "__main__":
     random_result, rand_wrate, rand_odds = random_strategy(code, seq_len)
     bench_result = list(bench_mark(code).values)
     sharps = list(
-        map(calculate_sharpe_ratio, [vgg_lstm_result, gbdt_result, random_result])
+        map(
+            calculate_sharpe_ratio,
+            [vgg_lstm_result[seq_len:], gbdt_result[seq_len:], random_result[seq_len:]],
+        )
     )
     drowdowns = list(
         map(calculate_max_drawdown, [vgg_lstm_result, gbdt_result, random_result])

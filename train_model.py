@@ -174,7 +174,8 @@ def agg_data_train(batch_size: int, seq_len: int, split_data: int = 20220913):
 
 
 if __name__ == "__main__":
+    print(f"----------train subject {code}----------")
     if if_agg:
         agg_data_train(batch_size, seq_len)
-    print(f"----------train subject {code}----------")
-    # model = mk_vgg_lstm_model(code, batch_size, seq_len)
+    else:
+        model = mk_vgg_lstm_model(code, batch_size, seq_len)

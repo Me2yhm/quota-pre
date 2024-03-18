@@ -40,7 +40,8 @@ def annualized_return(returns: float, holding_period_years: float = 1 / 360):
         returns: 期末净值/期初净值
         holding_period_years: 持有期（年）
     """
-    annual_return = np.log(returns) / holding_period_years
+    # annual_return = np.log(returns) / holding_period_years
+    annual_return = returns ** (1 / holding_period_years) - 1
     return annual_return
 
 
@@ -54,10 +55,15 @@ def calculate_sharpe_ratio(result: list[float], risk_free_rate: float = 0.02):
 
     """
     returns = np.asarray(result)
-    returns = list(map(annualized_return, returns))
-    returns = np.asarray(returns)
+    excess_return = annualized_return(returns[-1], len(returns) / 256) - risk_free_rate
+    returns = returns[1:] / returns[:-1] - 1
+    # returns = list(map(annualized_return, returns))
+    # returns = [
+    #     annualized_return(returns[i], (i + 1) / 360) for i in range(len(returns))
+    # ]
+    # returns = np.asarray(returns)
     excess_returns = returns - risk_free_rate
-    sharpe_ratio = np.mean(excess_returns) / np.std(excess_returns)
+    sharpe_ratio = (excess_return) / (np.std(excess_returns, ddof=1) * np.sqrt(256))
     return sharpe_ratio
 
 

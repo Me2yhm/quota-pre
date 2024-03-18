@@ -13,8 +13,9 @@ class futureAccount:
     factors: list[str,]
     cash: float
     stand: str
-    transactions: dict[str, list[str:dict]]
+    transactions: dict[str, list[dict]]
     current_date: str
+    margin: float
 
     def __init__(
         self,
@@ -23,13 +24,19 @@ class futureAccount:
         pool: dict[str:dict] = {},
         fu_overtoday_fee: float = 0.000024,
         fu_intoday_fee: float = 0.00035,
+        long_margin: float = 0.12,
+        short_margin: float = 0.12,
     ):
         self.current_date = current_date
         self.base = base
         self.cash = base
         self.pool = pool
+        self.fate_cash = 0.0
         self.fu_overtoday_fee = fu_overtoday_fee
         self.fu_intoday_fee = fu_intoday_fee
+        self.long_margin = long_margin
+        self.short_margin = short_margin
+        self.margin = 0.0
         self.portfolio_value = self.calculate_portfolio_value()
         self.transactions = defaultdict(list)
 
@@ -42,12 +49,32 @@ class futureAccount:
     def order(self, symbol: str, volumes: int, price: float):
         "按照量买卖证券,限制买空不限制卖空"
         try:
+            if symbol in ["IF.CFX", "IH.CFX"]:
+                unit = price * 300
+            elif symbol in ["IC.CFX", "IM.CFX"]:
+                unit = price * 200
             if volumes > 0:
-                if self.cash < price * (1 + self.fu_overtoday_fee):
+                if self.cash < unit * (self.long_margin + self.fu_overtoday_fee):
                     return
-                elif price * volumes * (1 + self.fu_overtoday_fee) > self.cash:
-                    volumes = int(self.cash / price / (1 + self.fu_overtoday_fee))
-            self.cash -= volumes * price
+                elif (
+                    unit * volumes * (self.long_margin + self.fu_overtoday_fee)
+                    > self.cash
+                ):
+                    volumes = int(
+                        self.cash / unit / (self.long_margin + self.fu_overtoday_fee)
+                    )
+            else:
+                if self.cash < unit * (self.short_margin + self.fu_overtoday_fee):
+                    return
+                elif (
+                    unit * (-volumes) * (self.short_margin + self.fu_overtoday_fee)
+                    > self.cash
+                ):
+                    volumes = -int(
+                        self.cash / unit / (self.short_margin + self.fu_overtoday_fee)
+                    )
+            self.fate_cash -= volumes * unit
+            self.cash -= abs(volumes * unit) * self.fu_overtoday_fee
             if symbol not in self.pool:
                 self.pool[symbol] = {
                     "code": symbol,
@@ -59,7 +86,7 @@ class futureAccount:
                 self.pool[symbol]["price"] = price
             if self.pool[symbol]["volume"] == 0:
                 del self.pool[symbol]
-            self.cash -= abs(volumes * price) * self.fu_overtoday_fee
+
             self.calculate_portfolio_value()
             self.transactions[self.current_date].append(
                 {
@@ -74,16 +101,18 @@ class futureAccount:
     def order_to(self, symbol: str, volumes: float, price: float):
         """购买股票到满仓的指定比例，volumes需要大于零"""
         try:
-            if self.cash < price and volumes < 0:
-                return
+            if symbol in ["IF.CFX", "IH.CFX"]:
+                unit = price * 300
+            elif symbol in ["IC.CFX", "IM.CFX"]:
+                unit = price * 200
             if volumes <= 0:
                 try:
                     total_volume = self.pool[symbol]["volume"]
                     volumes = -int(total_volume * (1 - volumes))
                 except KeyError:
-                    volumes = int(self.cash * volumes / price)
+                    volumes = int(self.cash * volumes / unit / self.short_margin)
             else:
-                volumes = int(self.cash / price * volumes)
+                volumes = int(self.cash / unit * volumes / self.long_margin)
             self.order(symbol, volumes, price)
         except Exception as e:
             print(e)
@@ -105,8 +134,19 @@ class futureAccount:
                 for symbol in self.pool.keys():
                     price = self.pool[symbol]["price"]
                     volume = self.pool[symbol]["volume"]
-                    security_value += price * volume
-                self.portfolio_value = self.cash + security_value
+                    if symbol in ["IF.CFX", "IH.CFX"]:
+                        unit = price * 300
+                    elif symbol in ["IC.CFX", "IM.CFX"]:
+                        unit = price * 200
+                    margin = (
+                        abs(self.pool.get(symbol, {}).get("volume", 0))
+                        * unit
+                        * self.long_margin
+                    )
+                    self.cash -= margin - self.margin
+                    self.margin = margin
+                    security_value += unit * volume + self.fate_cash
+                self.portfolio_value = self.cash + security_value + self.margin
                 return self.portfolio_value
         except Exception as e:
             print(e)
