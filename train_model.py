@@ -41,7 +41,7 @@ class CustomLoss(torch.nn.Module):
     def forward(self, output, target):
         """
         通过预测向量和真实向量的夹角来度量损失程度
-        为了使5类真实类别向量的家教不均匀,加了一个线性变换,即self.weight
+        为了使5类真实类别向量的夹角不均匀,加了一个线性变换,即self.weight
         """
         assert (
             output.size() == target.size()

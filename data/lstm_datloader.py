@@ -46,7 +46,6 @@ def data_to_zscore(data: pd.DataFrame) -> pd.DataFrame:
     pcg = list(data["close"].pct_change())
     returns = features.iloc[:, 1:22].astype(float).apply(np.log).diff()
     indicaters = features.iloc[:, 22:].astype(float)
-    dims = len(features.columns)
     for i in range(1, 22):
         features.iloc[:, i] = cal_zscore(returns.iloc[:, i - 1].values)
     for i in range(22, 53):

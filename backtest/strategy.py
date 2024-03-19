@@ -4,13 +4,20 @@ from typing import Callable
 from datetime import datetime, timedelta
 from functools import partial
 
+import numpy as np
 import torch
 import pandas as pd
 import matplotlib.pyplot as plt
 import lightgbm as lgb
 
 from backtest.schema import futureAccount
-from data.lstm_datloader import data_to_zscore, get_labled_data, make_data, make_seqs
+from data.lstm_datloader import (
+    cal_zscore,
+    data_to_zscore,
+    get_labled_data,
+    make_data,
+    make_seqs,
+)
 from model.vgg_lstm import VGG_LSTM
 from gbdt import split_data, train_gbdt
 from train_model import mk_vgg_lstm_model, update_vgg_lstm
@@ -63,9 +70,23 @@ def read_orin_data(code: str) -> pd.DataFrame:
     return test_data
 
 
+def make_pre_data(test_data: pd.DataFrame) -> torch.Tensor:
+    features = test_data.drop(columns=["change1", "ts_code", "trade_date"]).reset_index(
+        drop=True
+    )
+    returns = features.iloc[:, 1:22].astype(float).apply(np.log).diff()
+    indicaters = features.iloc[:, 22:].astype(float)
+    for i in range(1, 22):
+        features.iloc[:, i] = cal_zscore(returns.iloc[:, i - 1].values)
+    for i in range(22, 53):
+        features.iloc[:, i] = cal_zscore(indicaters.iloc[:, i - 26].values)
+    features = torch.tensor(features.values, dtype=torch.float32)
+    return features
+
+
 def make_vgg_data(code: str, seq_len: int) -> torch.Tensor:
-    test_data = read_data(code)
-    features = torch.tensor(test_data.iloc[:, :-1].to_numpy(), dtype=torch.float32)
+    test_data = read_orin_data(code)
+    features = make_pre_data(test_data)
     features = make_seqs(seq_len, features)
     return features
 
@@ -168,9 +189,7 @@ class strategy:
                 self.account.update_date(1)
             price = self.orin_data.loc[i, ["close"]].item()
             self.daily_settle(price)
-            if self.has_signal:
-                execut_signal(self.code, self.account, self.weight, self.signals, price)
-                self.has_signal = False
+
             self.account.update_price({self.code: price})
             self.portfolio_values.append(self.account.portfolio_value)
             if (i + 1) >= self.seq_len and i <= len(self.orin_data) - 1:
@@ -187,6 +206,9 @@ class strategy:
                         )
                         self.update_model(update_fuc, data)
                 self.has_signal = True
+            if self.has_signal:
+                execut_signal(self.code, self.account, self.weight, self.signals, price)
+                self.has_signal = False
         self.end_date = self.account.current_date
 
     def daily_settle(self, current_price: float):
@@ -215,7 +237,7 @@ class strategy:
                     self.odds["loss"].append(abs(intrest))
 
     def update_model(self, update_fuc: Callable, data):
-        update_fuc(self.model, data)
+        # update_fuc(self.model, data)
         pass
 
 
@@ -250,6 +272,7 @@ def vgg_lstm_strategy(code: str, seq_len: int, if_agg: bool = False):
     loss = sum(list(executer.odds["loss"]))
     win_rate = win_times / len(executer.win_times)
     odds = (win_return / win_times) / (loss / lose_times)
+    breakpoint()
     return [v / portfolio_values[0] for v in portfolio_values], win_rate, odds
 
 
