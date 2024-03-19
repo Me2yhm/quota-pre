@@ -60,13 +60,8 @@ def read_data(code: str) -> pd.DataFrame:
 def read_orin_data(code: str) -> pd.DataFrame:
     file_path = root_path.parent / f"data/{code}.csv"
     fu_dat = pd.read_csv(file_path)
-    # features = fu_dat.drop(columns=["change1", "ts_code"])
-    data = fu_dat.iloc[:-1, :]
-    test_data = (
-        data[data["trade_date"] >= 20220913]
-        # .drop(columns=["trade_date"])
-        .reset_index(drop=True)
-    )
+    data = fu_dat.iloc[:, :]
+    test_data = data[data["trade_date"] >= 20220913].reset_index(drop=True)
     return test_data
 
 
@@ -192,7 +187,7 @@ class strategy:
 
             self.account.update_price({self.code: price})
             self.portfolio_values.append(self.account.portfolio_value)
-            if (i + 1) >= self.seq_len and i <= len(self.orin_data) - 1:
+            if (i) >= self.seq_len and i <= len(self.orin_data) - 1:
                 self.signals = signal_gerater(
                     self.test_data[self.pre_times], self.model
                 )
@@ -237,11 +232,12 @@ class strategy:
                     self.odds["loss"].append(abs(intrest))
 
     def update_model(self, update_fuc: Callable, data):
-        # update_fuc(self.model, data)
+        update_fuc(self.model, data)
         pass
 
 
 def lstm_sig_gener(data, model) -> torch.Tensor:
+    print("prediction----", generate_signal(data.unsqueeze(0), model))
     return generate_signal(data.unsqueeze(0), model)
 
 
@@ -272,7 +268,6 @@ def vgg_lstm_strategy(code: str, seq_len: int, if_agg: bool = False):
     loss = sum(list(executer.odds["loss"]))
     win_rate = win_times / len(executer.win_times)
     odds = (win_return / win_times) / (loss / lose_times)
-    breakpoint()
     return [v / portfolio_values[0] for v in portfolio_values], win_rate, odds
 
 
@@ -300,6 +295,7 @@ def gbdt_strategy(code: str, seq_len: int):
     loss = sum(list(executer.odds["loss"]))
     win_rate = win_times / len(executer.win_times)
     odds = (win_return / win_times) / (loss / lose_times)
+    breakpoint()
     return [v / portfolio_values[0] for v in portfolio_values], win_rate, odds
 
 
@@ -325,6 +321,10 @@ def bench_mark(code: str) -> pd.Series:
 if __name__ == "__main__":
     if if_agg:
         print("----------------use agg model----------------")
+    test_data = read_orin_data(code)
+    test_date = test_data["trade_date"].apply(
+        lambda x: str(x)[2:4] + "-" + str(x)[4:6] + "-" + str(x)[6:]
+    )
     vgg_lstm_result, lstm_wrate, lstm_odds = vgg_lstm_strategy(code, seq_len, if_agg)
     gbdt_result, gbdt_wrate, gbdt_odds = gbdt_strategy(code, seq_len)
     random_result, rand_wrate, rand_odds = random_strategy(code, seq_len)
@@ -344,7 +344,8 @@ if __name__ == "__main__":
             "gbdt": gbdt_result,
             "random": random_result,
             "bench": bench_result,
-        }
+        },
+        index=test_date,
     )
     rates = pd.DataFrame(
         {
@@ -357,5 +358,10 @@ if __name__ == "__main__":
     )
     print(f"----------strategy subject {code}-------------")
     print(rates)
+    plt.rcParams["font.sans-serif"] = ["SimHei"]
+    plt.rcParams["axes.unicode_minus"] = False
+    plt.rc("font", size=12)
     returns.dropna().plot()
+    plt.xlabel("回测时间")
+    plt.ylabel("净值")
     plt.show()
