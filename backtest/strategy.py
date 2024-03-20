@@ -38,6 +38,7 @@ seq_len = int(os.environ["SEQ_LEN"])
 hidden_dim = int(os.environ["HIDDEN_DIM"])
 code = os.environ["CODE"]
 if_agg = bool(int(os.environ["IF_AGG"]))
+split_date = int(os.environ["SPLIT_DATE"])
 
 
 class tradeSignal:
@@ -61,7 +62,7 @@ def read_orin_data(code: str) -> pd.DataFrame:
     file_path = root_path.parent / f"data/{code}.csv"
     fu_dat = pd.read_csv(file_path)
     data = fu_dat.iloc[:, :]
-    test_data = data[data["trade_date"] >= 20220913].reset_index(drop=True)
+    test_data = data[data["trade_date"] >= split_date].reset_index(drop=True)
     return test_data
 
 
@@ -169,7 +170,9 @@ class strategy:
         self.odds = {"win": [], "loss": []}
         self.portfolio_values = []
         self.weight = torch.tensor([-0.5, -0.2, 0.0, 0.2, 0.5], dtype=torch.float32)
-        self.account = futureAccount(current_date="20220913", base=10000000, pool={})
+        self.account = futureAccount(
+            current_date=f"{split_date}", base=10000000, pool={}
+        )
         self.start_date = self.account.current_date
 
     def excute_stratgy(

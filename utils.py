@@ -89,6 +89,7 @@ if __name__ == "__main__":
     class_num = 5
     code = "IC.CFX"
     if_agg = 0
+    split_date = 20230913
     environ = {
         "BATCH_SIZE": str(batch_size),
         "INPUT_DIM": str(input_dim),
@@ -98,6 +99,7 @@ if __name__ == "__main__":
         "NUM_LAYERS": str(num_layers),
         "CODE": code,
         "IF_AGG": if_agg,
+        "SPLIT_DATE": split_date,
     }
     env_file_path = path / "env_vars.txt"
     write_env(env_file_path, environ)

@@ -13,6 +13,7 @@ env_path = Path(__file__).parent / "env_vars.txt"
 os.environ.update(read_env(env_path))
 windows = int(os.environ["SEQ_LEN"])
 code = os.environ["code"]
+split_date = int(os.environ["SPLIT_DATE"])
 
 
 def trans_class_num(cls: list):
@@ -92,5 +93,5 @@ def test_gbdt(code: str, seq_len: int, split_date: int = 20220913):
 
 
 if __name__ == "__main__":
-    train_gbdt(code, windows)
-    test_gbdt(code, windows)
+    train_gbdt(code, windows, split_date=split_date)
+    test_gbdt(code, windows, split_date=split_date)

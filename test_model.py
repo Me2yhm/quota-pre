@@ -15,12 +15,13 @@ batch_size = int(os.environ["BATCH_SIZE"])
 hidden_dim = int(os.environ["HIDDEN_DIM"])
 code = os.environ["CODE"]
 if_agg = bool(int(os.environ["IF_AGG"]))
+split_date = int(os.environ["SPLIT_DATE"])
 
 model_path = Path(__file__).parent / f"vgg_lstm_model_{code}.pth"
 if if_agg:
     model_path = Path(__file__).parent / "vgg_lstm_model_agg.pth"
     print("---------------test agg model---------------")
-test_data = lstm_test_data(code, batch_size, seq_len)
+test_data = lstm_test_data(code, batch_size, seq_len, split_data=split_date)
 # criterion = torch.nn.MSELoss(reduction="sum")
 criterion = CustomLoss()
 model = VGG_LSTM(class_num, input_dim, seq_len, hidden_dim)

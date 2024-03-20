@@ -21,6 +21,7 @@ class_num = int(os.environ["CLASS_NUM"])
 code = os.environ["CODE"]
 codes = ["IH.CFX", "IF.CFX", "IC.CFX"]
 if_agg = bool(int(os.environ["IF_AGG"]))
+split_date = int(os.environ["SPLIT_DATE"])
 
 
 class CustomLoss(torch.nn.Module):
@@ -176,6 +177,6 @@ def agg_data_train(batch_size: int, seq_len: int, split_data: int = 20220913):
 if __name__ == "__main__":
     print(f"----------train subject {code}----------")
     if if_agg:
-        agg_data_train(batch_size, seq_len)
+        agg_data_train(batch_size, seq_len, split_data=split_date)
     else:
-        model = mk_vgg_lstm_model(code, batch_size, seq_len)
+        model = mk_vgg_lstm_model(code, batch_size, seq_len, split_data=split_date)
