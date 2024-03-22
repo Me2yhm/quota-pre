@@ -263,6 +263,9 @@ class shortSellCP(currencyPool):
         self.volume -= amount
         self.cal_value()
 
+    def check(self, amount: float | int):
+        return amount
+
 
 class baseAccount(ABC):
     pools: dict[str, pool]
