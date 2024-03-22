@@ -75,8 +75,8 @@ def make_data(
         .drop(columns=["trade_date"])
         .reset_index(drop=True)
     )
-    train_data.to_csv(Path(__file__).parent / f"{code}_train_data.csv", index=False)
-    test_data.to_csv(Path(__file__).parent / f"{code}_test_data.csv", index=False)
+    # train_data.to_csv(Path(__file__).parent / f"{code}_train_data.csv", index=False)
+    # test_data.to_csv(Path(__file__).parent / f"{code}_test_data.csv", index=False)
     return train_data, test_data
 
 
@@ -87,7 +87,7 @@ def get_labled_data(
     shuffle: bool = True,
     resample: bool = True,
 ) -> DataLoader:
-    ros = SMOTE(k_neighbors=4)
+    ros = SMOTE(k_neighbors=2)
     x = torch.tensor(data.iloc[:, :-1].to_numpy(), dtype=torch.float32)
     y = mark_zscore(data.iloc[:, -1].values)
     y = torch.tensor(y, dtype=torch.float32)
