@@ -25,6 +25,26 @@ def float_division(x, y) -> float:
     return result_float
 
 
+class BREED:
+    breed: str
+    unit: int
+
+    def __init__(self, breed: str, unit: int) -> None:
+        self.breed = breed
+        self.unit = unit
+
+
+class currencyBREED(BREED):
+    breed: str
+    unit: int
+
+    def __init__(self, breed: str) -> None:
+        super().__init__(breed, 0)
+
+
+BASE_CASH = currencyBREED("base_currency")
+
+
 class asset(TypedDict):
     breed: str
     volume: int
@@ -33,17 +53,15 @@ class asset(TypedDict):
 
 
 class pool:
-    breed: str
+    breed: BREED
     volume: int
     price: float
     unit: int
 
-    def __init__(
-        self, breed: str, price: float, unit: int, volume: int | float = 0
-    ) -> None:
+    def __init__(self, breed: BREED, price: float, volume: int | float = 0) -> None:
         self.breed = breed
         self.price = price
-        self.unit = unit
+        self.unit = breed.unit
         if self.unit != 0:
             assert isinstance(volume, int) and volume > 0
 
@@ -53,7 +71,7 @@ class pool:
     @property
     def dic(self) -> asset:
         pool_dic: asset = {
-            "breed": self.breed,
+            "breed": self.breed.breed,
             "volume": self.volume,
             "price": self.price,
             "unit": self.unit,
@@ -67,12 +85,12 @@ class pool:
 
     @property
     def values(self) -> list:
-        pool_values = [self.breed, self.volume, self.price, self.unit]
+        pool_values = [self.breed.breed, self.volume, self.price, self.unit]
         return pool_values
 
     def __call__(self) -> asset:
         pool_dic: asset = {
-            "breed": self.breed,
+            "breed": self.breed.breed,
             "volume": self.volume,
             "price": self.price,
             "unit": self.unit,
@@ -80,7 +98,7 @@ class pool:
         return pool_dic
 
     def __repr__(self) -> str:
-        return f"pool(breed={self.breed},volume={self.volume},price={self.price},unit={self.unit})"
+        return f"pool(breed={self.breed.breed},volume={self.volume},price={self.price},unit={self.unit})"
 
     def __str__(self) -> str:
         return str(self.dic)
@@ -221,23 +239,39 @@ class pool:
 class currencyPool(pool):
 
     def __init__(self, breed: str, price: float, volume: float = 0.0) -> None:
-        unit = 0
-        super().__init__(breed, price, unit, volume)
+        cur_breed = currencyBREED(breed)
+        super().__init__(cur_breed, price, volume)
 
 
 class cashPool(currencyPool):
     def __init__(self, volume: float = 0.0) -> None:
-        breed = "base_currency"
         price = 1.0
-        super().__init__(breed, price, volume)
+        super().__init__("base_currency", price, volume)
 
 
-class account(ABC):
+class shortSellCP(currencyPool):
+
+    def __init__(self, volume: float = 0.0) -> None:
+        price = 1.0
+        super().__init__("base_currency", price, volume)
+
+    def withdraw(self, amount: float | int):
+        """
+        withdraw certain amount asset, can short sell
+        """
+        assert amount >= 0, "using withdraw method need amount no less than 0."
+        self.volume -= amount
+        self.cal_value()
+
+
+class baseAccount(ABC):
     pools: dict[str, pool]
     portfolio_value: float
 
     def __init__(
-        self, base_currency: float, pools: dict[str, pool] = defaultdict(pool)
+        self,
+        base_currency: float,
+        pools: dict[str, pool] = defaultdict(pool),
     ) -> None:
         self.pools = pools
         cash = cashPool(base_currency)
@@ -278,38 +312,37 @@ class account(ABC):
         volume = self.count_volume(breed)
         if amount is None:
             return volume
-        volume = self.pools[breed].check(amount)
-        return volume
+        amount = self.pools[breed].check(amount)
+        return amount
 
-    def withdraw_breed(self, breed: str, amount: float | int):
+    def withdraw_breed(self, breed: BREED, amount: float | int):
         """
         withdraw breed from pools
         """
         try:
-            poo = self.pools[breed]
+            poo = self.pools[breed.breed]
             poo.withdraw(amount)
-            if self.pools[breed].volume == 0:
-                del self.pools[breed]
+            if self.pools[breed.breed].volume == 0:
+                del self.pools[breed.breed]
             self.cal_portfolio_value()
         except KeyError:
             pass
 
     def save_breed(
         self,
-        breed: str,
+        breed: BREED,
         amount: float | int,
         price: float,
-        unit: int = 1,
     ):
         """
         save breed in pools
         """
         try:
-            self.pools[breed].save(amount)
-            self.update_price(breed, price)
+            self.pools[breed.breed].save(amount)
+            self.update_price(breed.breed, price)
         except KeyError:
-            position = pool(breed, price, unit, amount)
-            self.pools[breed] = position
+            position = pool(breed, price, amount)
+            self.pools[breed.breed] = position
         finally:
             self.cal_portfolio_value()
 
@@ -317,10 +350,11 @@ class account(ABC):
         """
         if amount >=0, withdraw cash, else save.
         """
+        breed = currencyBREED("base_currency")
         if amount >= 0:
-            self.withdraw_breed("base_currency", amount)
+            self.withdraw_breed(breed, amount)
         else:
-            self.save_breed("base_currency", -amount, 1.0, 0)
+            self.save_breed(breed, -amount, 1.0)
 
     def can_buy_volume(
         self, price_A: float, unit_A, volume_A: int, price_B: float, unit_B: int = 1
@@ -353,9 +387,7 @@ class account(ABC):
             volume = round(buy_money / price_B, accuracy)
             return int(volume)
 
-    def trade(
-        self, breed_A: str, breed_B: str, volume_A: int, price_B: float, unit: int = 1
-    ):
+    def trade(self, breed_A: BREED, breed_B: BREED, volume_A: int, price_B: float):
         """
         用品种A去购买品种B
         @parameters:
@@ -366,21 +398,22 @@ class account(ABC):
         unit: 是否只能整数买(最小购买单位)
         """
         try:
-            price_A = self.get_breed_price(breed_A)
-            unit_A = self.pools[breed_A]["unit"]
-            volume_A = self.check_breed(breed_A, volume_A)
+            price_A = self.get_breed_price(breed_A.breed)
+            unit_A = self.pools[breed_A.breed].breed.unit
+            volume_A = self.check_breed(breed_A.breed, volume_A)
+            unit = breed_B.unit
             volume_B = self.can_buy_volume(price_A, unit_A, volume_A, price_B, unit)
             if volume_B < unit:
                 return
             volume_A = self.can_buy_volume(price_B, unit, volume_B, price_A, unit_A)
             self.withdraw_breed(breed_A, volume_A)
-            self.save_breed(breed_B, volume_B, price_B, unit)
+            self.save_breed(breed_B, volume_B, price_B)
         except KeyError:
             return
 
     def get_breed_price(self, breed: str) -> float:
         try:
-            price = self.pools[breed]["price"]
+            price = self.pools[breed].price
             return price
         except KeyError:
             print(f"Warning: {breed} not in {self}.pools")
@@ -401,7 +434,7 @@ class account(ABC):
             breeds = list(self.pools.keys())
             data = {}
             for col in ["breed", "volume", "price", "unit"]:
-                data[col] = [self.pools[bre][col] for bre in breeds]
+                data[col] = [self.pools[bre].dic[col] for bre in breeds]
             return pd.DataFrame(data)
 
     @abstractmethod
@@ -447,67 +480,70 @@ class account(ABC):
         """
 
 
-class unFeeAaccount(account):
+class unFeeAaccount(baseAccount):
     """
     can not short selling and without transaction fee
     Due to the characteristics of Python floating-point operations, the control accuracy is 6 decimal places
     """
 
-    def buy(self, breed: str, volume: int, price: float, unit: int = 1):
+    def buy(self, breed: BREED, volume: int, price: float):
         assert volume >= 0
         need_money = volume * price
-        self.trade("base_currency", breed, need_money, price, unit)
+        self.trade(BASE_CASH, breed, need_money, price)
 
-    def buy_to(self, breed: str, rate: float, price: float, unit=1):
+    def buy_to(self, breed: BREED, rate: float, price: float):
         assert rate > 0
-        cash = self.pools["base_currency"]["volume"]
+        cash = self.pools["base_currency"].volume
         need_money = cash * rate
-        self.trade("base_currency", breed, need_money, price, unit)
+        self.trade(BASE_CASH, breed, need_money, price)
 
-    def sell(self, breed: str, volume: int, price: float, unit=1):
+    def sell(self, breed: BREED, volume: int | float, price: float):
         assert volume >= 0
-        self.update_price(breed, price)
-        self.trade(breed, "base_currency", volume, 1, unit)
+        self.update_price(breed.breed, price)
+        self.trade(breed, BASE_CASH, volume, 1.0)
 
-    def sell_to(self, breed: str, rate: float, price: float, unit=1):
+    def sell_to(self, breed: BREED, rate: float, price: float):
         assert rate >= 0
         try:
             assert breed in self.pools.keys()
             self.update_price(breed, price)
             rate = round(1 - rate, accuracy)
-            volume = int(self.pools[breed]["volume"] * rate)
-            self.sell(breed, volume, price, unit)
+            volume = self.pools[breed].volume * rate
+            volume = volume if breed.unit == 0 else int(volume)
+            self.sell(breed, volume, price)
         except AssertionError:
             print(f"Didn't have {breed} in pools, can't sell")
 
-    def order(self, breed: str, volume: int, price: float, unit=1):
+    def order(self, breed: BREED, volume: int, price: float):
         if volume >= 0:
-            self.buy(breed, volume, price, unit)
+            self.buy(breed, volume, price)
         else:
-            self.sell(breed, -volume, price, unit)
+            self.sell(breed, -volume, price)
 
-    def order_to(self, breed: str, rate: int, price: float, unit=1):
+    def order_to(self, breed: BREED, rate: int, price: float):
         try:
             assert -1 <= rate and rate <= 1
             if rate > 0:
-                self.buy_to(breed, rate, price, unit)
+                self.buy_to(breed, rate, price)
             else:
-                self.sell_to(breed, -rate, price, unit)
+                self.sell_to(breed, -rate, price)
         except AssertionError:
             print("Warning: order rate must belong to [0,1]")
 
     def cal_portfolio_value(self):
         porfolio_value = 0
         for poo in self.pools.values():
-            porfolio_value += poo["volume"] * poo["price"]
+            porfolio_value += poo.cash_value
         self.portfolio_value = porfolio_value
         return porfolio_value
 
 
-poo: pool = {"breed": "CF", "price": 5000, "unit": 1, "volume": 10}
+breed_CF = BREED("CF", 1)
+breed_CH = BREED("CH", 1)
+poo = pool(breed_CF, 5000, 10)
 acc = unFeeAaccount(1000000, {"CF": poo})
 print(acc.portfolio_value)
-acc.trade("CF", "CH", 3, 2000, unit=0)
-acc.trade("CH", "base_currency", 1, 1, 1)
+acc.trade(breed_CF, breed_CH, 5, 2000)
+# acc.trade(breed_CF, BASE_CASH, 1, 1)
 print(acc.portfolio_value)
 print(acc.get_pools_df())
