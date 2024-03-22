@@ -1,6 +1,6 @@
-import math
+from math import gcd, ceil, floor
 from abc import ABC, abstractmethod
-from typing import TypedDict
+from typing import Literal, TypedDict
 from collections import defaultdict
 
 import pandas as pd
@@ -12,7 +12,7 @@ def lcm_float(x, y) -> float:
     multiplier = 10 ** max(len(str(x).split(".")[-1]), len(str(y).split(".")[-1]))
     x_int = int(x * multiplier)
     y_int = int(y * multiplier)
-    lcm_int = x_int * y_int // math.gcd(x_int, y_int)
+    lcm_int = x_int * y_int // gcd(x_int, y_int)
     return round(lcm_int / multiplier, accuracy)
 
 
@@ -25,27 +25,222 @@ def float_division(x, y) -> float:
     return result_float
 
 
-class pool(TypedDict):
+class asset(TypedDict):
     breed: str
     volume: int
     price: float
     unit: int
 
 
+class pool:
+    breed: str
+    volume: int
+    price: float
+    unit: int
+
+    def __init__(
+        self, breed: str, price: float, unit: int, volume: int | float = 0
+    ) -> None:
+        self.breed = breed
+        self.price = price
+        self.unit = unit
+        if self.unit != 0:
+            assert isinstance(volume, int) and volume > 0
+
+        self.volume = volume if self.unit > 0 else float(volume)
+        self.cash_value = self.price * self.volume
+
+    @property
+    def dic(self) -> asset:
+        pool_dic: asset = {
+            "breed": self.breed,
+            "volume": self.volume,
+            "price": self.price,
+            "unit": self.unit,
+        }
+        return pool_dic
+
+    @property
+    def keys(self) -> list:
+        pool_keys = ["breed", "colume", "price", "unit"]
+        return pool_keys
+
+    @property
+    def values(self) -> list:
+        pool_values = [self.breed, self.volume, self.price, self.unit]
+        return pool_values
+
+    def __call__(self) -> asset:
+        pool_dic: asset = {
+            "breed": self.breed,
+            "volume": self.volume,
+            "price": self.price,
+            "unit": self.unit,
+        }
+        return pool_dic
+
+    def __repr__(self) -> str:
+        return f"pool(breed={self.breed},volume={self.volume},price={self.price},unit={self.unit})"
+
+    def __str__(self) -> str:
+        return str(self.dic)
+
+    def __add__(self, poo):
+        assert isinstance(poo, pool)
+        assert self.breed == poo.breed, "Warning: just the same breed can be added!"
+        self.update_price(poo.price)
+        self.save(poo.volume)
+        return self
+
+    def __sub__(self, poo):
+        assert isinstance(poo, pool)
+        assert self.breed == poo.breed, "Warning: just the same breed can be added!"
+        self.update_price(poo.price)
+        self.withdraw(poo.volume)
+        return self
+
+    def cal_value(self) -> float:
+        value = round(self.price * self.volume, accuracy)
+        self.cash_value = value
+        return value
+
+    def update_price(self, price: float):
+        """
+        update price if price change
+        """
+        assert price > 0, "price need more than 0"
+        self.price = price
+        self.cal_value()
+
+    def inte(self, amount: float, integral: Literal["ceil", "floor"] = "ceil"):
+        integ = ceil if integral == "ceil" else floor
+        return integ(amount)
+
+    def check(self, amount: float | int):
+        """
+        check the enough amout can be withdrawed
+        """
+        amount = float(amount) if self.unit == 0 else int(amount)
+        if self.volume >= amount:
+            return amount
+        else:
+            print(f"current volume is {self.volume}, got {amount}")
+            return self.volume
+
+    def withdraw(self, amount: float | int):
+        """
+        withdraw certain amount asset
+        """
+        assert amount >= 0, "using withdraw method need amount no less than 0."
+        amount = self.check(amount)
+        self.volume -= amount
+        self.cal_value()
+
+    def save(self, amount: float | int):
+        """
+        add asset
+        """
+        assert amount >= 0, "using save method need amount no less than 0."
+        amount = float(amount) if self.unit == 0 else int(amount)
+        self.volume += amount
+        self.cal_value()
+
+    def save_to(self, amount: float | int, integral: Literal["ceil", "floor"] = "ceil"):
+        """
+        save in asset to a certain volume
+        """
+        assert (
+            self.volume <= amount
+        ), f"current volume {self.volume} already more than target amount {amount}"
+        amount = float(amount) if self.unit == 0 else self.inte(amount, integral)
+        volume = self.volume
+        self.volume = amount
+        self.cal_value()
+        return amount - volume
+
+    def save_as_rate(self, rate: float, integral: Literal["ceil", "floor"] = "ceil"):
+        """
+        save in asset as a certain rate
+        """
+        amount = round(self.volume * rate, accuracy)
+        amount = float(amount) if self.unit == 0 else self.inte(amount, integral)
+        self.save(amount)
+        return amount
+
+    def save_to_rate(self, rate: float, integral: Literal["ceil", "floor"] = "ceil"):
+        """
+        save asset to a certain rate
+        """
+        assert (
+            rate >= 1.0
+        ), f"save to a certain rate nee rate no less then 1, got {rate}"
+        amount = round(self.volume * rate, accuracy)
+        amount = float(amount) if self.unit == 0 else self.inte(amount, integral)
+        volume = self.volume
+        self.volume = amount
+        self.cal_value()
+        return amount - volume
+
+    def withdraw_to(
+        self, amount: float | int, integral: Literal["ceil", "floor"] = "ceil"
+    ):
+        assert (
+            self.volume >= amount
+        ), f"current volume {self.volume} already less than target amount {amount}"
+        amount = float(amount) if self.unit == 0 else self.inte(amount, integral)
+        volume = self.volume
+        self.volume = amount
+        self.cal_value()
+        return volume - amount
+
+    def withdraw_to_rate(
+        self, rate: float, integral: Literal["ceil", "floor"] = "ceil"
+    ):
+        """
+        withdraw asset to a certain rate
+        """
+        amount = round(self.volume * rate, accuracy)
+        amount = float(amount) if self.unit == 0 else self.inte(amount, integral)
+        volume = self.volume
+        self.volume = amount
+        self.cal_value()
+        return volume - amount
+
+    def withdraw_as_rate(
+        self, rate: float, integral: Literal["ceil", "floor"] = "floor"
+    ):
+        """
+        withdraw asset as a certain rate
+        """
+        amount = round(self.volume * rate, accuracy)
+        amount = float(amount) if self.unit == 0 else self.inte(amount, integral)
+        self.withdraw(amount)
+        return amount
+
+
+class currencyPool(pool):
+
+    def __init__(self, breed: str, price: float, volume: float = 0.0) -> None:
+        unit = 0
+        super().__init__(breed, price, unit, volume)
+
+
+class cashPool(currencyPool):
+    def __init__(self, volume: float = 0.0) -> None:
+        breed = "base_currency"
+        price = 1.0
+        super().__init__(breed, price, volume)
+
+
 class account(ABC):
-    pools: dict[str:pool]
+    pools: dict[str, pool]
     portfolio_value: float
 
     def __init__(
         self, base_currency: float, pools: dict[str, pool] = defaultdict(pool)
     ) -> None:
         self.pools = pools
-        cash: pool = {
-            "breed": "base_currency",
-            "volume": base_currency,
-            "price": 1,
-            "unit": 0,
-        }
+        cash = cashPool(base_currency)
         self.pools["base_currency"] = cash
         self.cal_portfolio_value()
 
@@ -54,8 +249,8 @@ class account(ABC):
         count the position of certain breed
         """
         try:
-            volume = self.pools[breed]["volume"]
-            return volume
+            poo = self.pools[breed]
+            return poo.volume
         except KeyError:
             print(f"Warning: the breed {breed} not in pools")
             return 0
@@ -66,23 +261,24 @@ class account(ABC):
         """
         return self.count_volume("base_currency")
 
-    def check_cash(self, amount: float = 0) -> float:
+    def check_cash(self, amount: float | None = None) -> float:
         """
         check the cash wether is enough
         """
-        cash = self.count_base_current()
-        if cash >= amount and cash > 0:
-            return amount
-        print(f"Warning: Current cash is less than need amount {amount}, get {cash}")
-        return cash
+        try:
+            if amount is None:
+                return self.pools["base_currency"].volume
+            cash = self.pools["base_currency"].check(amount)
+            return cash
+        except KeyError:
+            print("Doese not have base current")
+            return 0.0
 
-    def check_breed(self, breed: str, amount: float | int = 0) -> float:
+    def check_breed(self, breed: str, amount: float | int | None = None) -> float:
         volume = self.count_volume(breed)
-        if volume >= amount and volume > 0:
-            return amount
-        print(
-            f"Warning: Current {breed} is less than need amount {amount}, get {volume}"
-        )
+        if amount is None:
+            return volume
+        volume = self.pools[breed].check(amount)
         return volume
 
     def withdraw_breed(self, breed: str, amount: float | int):
@@ -90,9 +286,9 @@ class account(ABC):
         withdraw breed from pools
         """
         try:
-            amount = self.check_breed(breed, amount)
-            self.pools[breed]["volume"] -= amount
-            if self.pools[breed]["volume"] == 0:
+            poo = self.pools[breed]
+            poo.withdraw(amount)
+            if self.pools[breed].volume == 0:
                 del self.pools[breed]
             self.cal_portfolio_value()
         except KeyError:
@@ -101,7 +297,7 @@ class account(ABC):
     def save_breed(
         self,
         breed: str,
-        amount: float,
+        amount: float | int,
         price: float,
         unit: int = 1,
     ):
@@ -109,15 +305,10 @@ class account(ABC):
         save breed in pools
         """
         try:
-            self.pools[breed]["volume"] += amount
+            self.pools[breed].save(amount)
             self.update_price(breed, price)
         except KeyError:
-            position: pool = {
-                "breed": breed,
-                "price": price,
-                "unit": unit,
-                "volume": amount,
-            }
+            position = pool(breed, price, unit, amount)
             self.pools[breed] = position
         finally:
             self.cal_portfolio_value()
@@ -129,7 +320,7 @@ class account(ABC):
         if amount >= 0:
             self.withdraw_breed("base_currency", amount)
         else:
-            self.save_breed("base_currency", amount, 1, 0)
+            self.save_breed("base_currency", -amount, 1.0, 0)
 
     def can_buy_volume(
         self, price_A: float, unit_A, volume_A: int, price_B: float, unit_B: int = 1
@@ -200,7 +391,7 @@ class account(ABC):
         update price of a certain breed if price change
         """
         try:
-            self.pools[breed]["price"] = price
+            self.pools[breed].update_price(price)
             self.cal_portfolio_value()
         except KeyError:
             pass
