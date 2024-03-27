@@ -107,7 +107,7 @@ if __name__ == "__main__":
     seq_len = 50
     num_layers = 1
     class_num = 5
-    code = "IF.CFX"
+    code = "IH.CFX"
     if_agg = 0
     split_date = 20230913
     environ = {
