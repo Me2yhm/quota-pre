@@ -1,9 +1,12 @@
+from math import gcd
 import os
 from pathlib import Path
 from datetime import datetime
 
 import numpy as np
 from chinese_calendar import is_holiday
+
+accuracy = 6
 
 
 def write_env(env_file_path, environ):
@@ -79,6 +82,23 @@ def calculate_max_drawdown(returns):
     return max_drawdown
 
 
+def lcm_float(x, y) -> float:
+    multiplier = 10 ** max(len(str(x).split(".")[-1]), len(str(y).split(".")[-1]))
+    x_int = int(x * multiplier)
+    y_int = int(y * multiplier)
+    lcm_int = x_int * y_int // gcd(x_int, y_int)
+    return round(lcm_int / multiplier, accuracy)
+
+
+def float_division(x, y) -> float:
+    multiplier = 10 ** max(len(str(x).split(".")[1]), len(str(y).split(".")[1]))
+    x_int = int(x * multiplier)
+    y_int = int(y * multiplier)
+    result_int = x_int // y_int
+    result_float = result_int / multiplier
+    return result_float
+
+
 if __name__ == "__main__":
     path = Path(__file__).parent
     batch_size = 64
@@ -100,6 +120,7 @@ if __name__ == "__main__":
         "CODE": code,
         "IF_AGG": if_agg,
         "SPLIT_DATE": split_date,
+        "ACCURACY": accuracy,
     }
     env_file_path = path / "env_vars.txt"
     write_env(env_file_path, environ)

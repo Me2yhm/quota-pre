@@ -10,7 +10,11 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import lightgbm as lgb
 
-from backtest.schema import futureAccount
+import sys
+
+sys.path.append("E:\\workspace\\quota-pre\\")
+
+from backtest.schema import BREED, futureAccount
 from data.lstm_datloader import (
     cal_zscore,
     data_to_zscore,
@@ -40,6 +44,13 @@ code = os.environ["CODE"]
 if_agg = bool(int(os.environ["IF_AGG"]))
 split_date = int(os.environ["SPLIT_DATE"])
 
+breed_IH = BREED("IH.CFX", 300, True)
+breed_IF = BREED("IF.CFX", 300, True)
+breed_IC = BREED("IC.CFX", 200, True)
+breed_IM = BREED("IM.CFX", 200, True)
+
+breed_dic = {bree.breed: bree for bree in [breed_IH, breed_IC, breed_IF, breed_IM]}
+
 
 class tradeSignal:
     HARD_BUY: float = 0.5
@@ -67,21 +78,22 @@ def read_orin_data(code: str) -> pd.DataFrame:
 
 
 def make_pre_data(test_data: pd.DataFrame) -> torch.Tensor:
-    features = test_data.drop(columns=["change1", "ts_code", "trade_date"]).reset_index(
-        drop=True
-    )
+    features = test_data.drop(columns=["change1", "ts_code"]).reset_index(drop=True)
     returns = features.iloc[:, 1:22].astype(float).apply(np.log).diff()
     indicaters = features.iloc[:, 22:].astype(float)
     for i in range(1, 22):
         features.iloc[:, i] = cal_zscore(returns.iloc[:, i - 1].values)
     for i in range(22, 53):
         features.iloc[:, i] = cal_zscore(indicaters.iloc[:, i - 26].values)
+    test_data = features[features["trade_date"] >= split_date].reset_index(drop=True)
+    features = test_data.iloc[:, 1:]
     features = torch.tensor(features.values, dtype=torch.float32)
     return features
 
 
 def make_vgg_data(code: str, seq_len: int) -> torch.Tensor:
-    test_data = read_orin_data(code)
+    file_path = root_path.parent / f"data/{code}.csv"
+    test_data = pd.read_csv(file_path)
     features = make_pre_data(test_data)
     features = make_seqs(seq_len, features)
     return features
@@ -98,16 +110,14 @@ def unilize(signals: torch.Tensor) -> torch.Tensor:
 
 
 def execut_signal(
-    code: str,
+    breed: BREED,
     account: futureAccount,
     weight: torch.Tensor,
     signals: torch.Tensor,
     price: float,
 ):
     volumes_rate = (unilize(signals) * weight).sum().item()
-    # arg = signals.argmax().item()
-    # volumes_rate = weight[arg].item()
-    account.order_to(code, volumes_rate, price)
+    account.order_to_rate(breed, volumes_rate, price)
 
 
 def generate_signal(data, model):
@@ -157,7 +167,7 @@ class strategy:
         model: Callable | None = None,
         update: bool = False,
     ) -> None:
-        self.code = code
+        self.breed = breed_dic[code]
         self.pre_times = 0
         self.model = model
         self.signals = None
@@ -169,9 +179,10 @@ class strategy:
         self.win_times = []
         self.odds = {"win": [], "loss": []}
         self.portfolio_values = []
+        self.pfo_returns = []
         self.weight = torch.tensor([-0.5, -0.2, 0.0, 0.2, 0.5], dtype=torch.float32)
         self.account = futureAccount(
-            current_date=f"{split_date}", base=10000000, pool={}
+            base_currency=10000000, current_date=f"{split_date}"
         )
         self.start_date = self.account.current_date
 
@@ -187,9 +198,8 @@ class strategy:
                 self.account.update_date(1)
             price = self.orin_data.loc[i, ["close"]].item()
             self.daily_settle(price)
-
-            self.account.update_price({self.code: price})
             self.portfolio_values.append(self.account.portfolio_value)
+            self.pfo_returns.append(self.account.pfo_return / self.account.base)
             if (i) >= self.seq_len and i <= len(self.orin_data) - 1:
                 self.signals = signal_gerater(
                     self.test_data[self.pre_times], self.model
@@ -205,34 +215,24 @@ class strategy:
                         self.update_model(update_fuc, data)
                 self.has_signal = True
             if self.has_signal:
-                execut_signal(self.code, self.account, self.weight, self.signals, price)
+                execut_signal(
+                    self.breed, self.account, self.weight, self.signals, price
+                )
                 self.has_signal = False
         self.end_date = self.account.current_date
 
     def daily_settle(self, current_price: float):
-        today = self.account.current_date
-        yesterday = roll_date(today)
-        if self.account.transactions and self.account.pool:
-            if yesterday in self.account.transactions.keys():
-                transacton = self.account.transactions[yesterday][-1]
-                symbol = transacton["code"]
-                if symbol in ["IF.CFX", "IH.CFX"]:
-                    multi = 300
-                elif symbol in ["IC.CFX", "IM.CFX"]:
-                    multi = 200
-                old_price = transacton["price"]
-                volume = transacton["volume"]
-                self.account.order(self.code, -volume, current_price)
-                new_volum = self.account.transactions[today][-1]["volume"]
-                returns = -new_volum * current_price * multi
-                pay = volume * old_price * multi
-                intrest = returns - pay
-                if intrest > 0:
-                    self.win_times.append(1)
-                    self.odds["win"].append(intrest)
-                else:
-                    self.win_times.append(0)
-                    self.odds["loss"].append(abs(intrest))
+        if self.account.pools:
+            old_return = self.account.pfo_return
+            self.account.order_to_rate(self.breed, 0, current_price)
+            returns = self.account.pfo_return
+            intrest = returns - old_return
+            if intrest > 0:
+                self.win_times.append(1)
+                self.odds["win"].append(intrest)
+            else:
+                self.win_times.append(0)
+                self.odds["loss"].append(abs(intrest))
 
     def update_model(self, update_fuc: Callable, data):
         update_fuc(self.model, data)
@@ -271,6 +271,7 @@ def vgg_lstm_strategy(code: str, seq_len: int, if_agg: bool = False):
     loss = sum(list(executer.odds["loss"]))
     win_rate = win_times / len(executer.win_times)
     odds = (win_return / win_times) / (loss / lose_times)
+    breakpoint()
     return [v / portfolio_values[0] for v in portfolio_values], win_rate, odds
 
 
@@ -298,7 +299,6 @@ def gbdt_strategy(code: str, seq_len: int):
     loss = sum(list(executer.odds["loss"]))
     win_rate = win_times / len(executer.win_times)
     odds = (win_return / win_times) / (loss / lose_times)
-    breakpoint()
     return [v / portfolio_values[0] for v in portfolio_values], win_rate, odds
 
 
