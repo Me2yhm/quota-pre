@@ -2,14 +2,19 @@ import math
 from datetime import datetime, timedelta
 from collections import defaultdict
 from abc import ABC, abstractmethod
+import os
+from pathlib import Path
 from typing import Literal, TypedDict
 
 
 import pandas as pd
 
-from backtest.utils import lcm_float
+from utils import lcm_float, read_env
 
-accuracy = 6
+env_path = Path(__file__).parent.parent / "env_vars.txt"
+env = read_env(env_path)
+os.environ.update(env)
+accuracy = int(os.environ["ACCURACY"])
 
 
 class BREED:
@@ -574,7 +579,10 @@ class unFeeAaccount(baseAccount):
         amount = (
             int(amount) // breed.unit * breed.unit if breed.unit > 0 else float(amount)
         )
-        volume = self.pools[breed.breed].volume
+        try:
+            volume = self.pools[breed.breed].volume
+        except KeyError:
+            volume = float(0) if breed.unit == 0 else int(0)
         assert isinstance(amount, type(volume))
         buy_amount = amount - volume
         self.buy(breed, buy_amount, price)
@@ -583,7 +591,10 @@ class unFeeAaccount(baseAccount):
         amount = (
             int(amount) // breed.unit * breed.unit if breed.unit > 0 else float(amount)
         )
-        volume = self.pools[breed.breed].volume
+        try:
+            volume = self.pools[breed.breed].volume
+        except KeyError:
+            volume = float(0) if breed.unit == 0 else int(0)
         assert isinstance(amount, type(volume))
         sell_amount = volume - amount
         self.sell(breed, sell_amount, price)
@@ -592,7 +603,10 @@ class unFeeAaccount(baseAccount):
         amount = (
             int(amount) // breed.unit * breed.unit if breed.unit > 0 else float(amount)
         )
-        volume = self.pools[breed.breed].volume
+        try:
+            volume = self.pools[breed.breed].volume
+        except KeyError:
+            volume = float(0) if breed.unit == 0 else int(0)
         if amount >= volume:
             self.buy_to_amount(breed, amount, price)
         else:
@@ -664,6 +678,7 @@ class futureAccount(unFeeAaccount):
         super().__init__(base_currency, {})
         margin_poo = currencyPool("margin", margin)
         self.margin_breed = margin_poo.breed
+        self.margin_rate = margin
         margin_poo.save(sum([fu.cash_value for fu in fu_pools.values()]))
         self.handle_cash(margin_poo.cash_value)
         fee_poo = feePool("fee", overtoday_fee)
@@ -683,16 +698,19 @@ class futureAccount(unFeeAaccount):
     def buy_to_rate(self, breed: BREED, rate: float, price: float):
         assert rate > 0
         try:
-            cash = self.pools["base_currency"].volume
-            margin_rate = self.pools["margin"].price
+            cash = self.check_cash()
+            margin_rate = self.margin_rate
             need_money = cash * rate
             fu_volume = (
                 int(need_money // (breed.unit * price * margin_rate)) * breed.unit
             )
             fu_money = fu_volume * price
-            if cash < fu_money * (margin_rate + self.pools["fee"].price):
+            need_margin = (
+                (fu_volume + self.fu_pools[breed.breed].volume) * price * margin_rate
+            )
+            if cash < (fu_money * self.pools["fee"].price + need_margin):
                 fu_volume -= breed.unit
-            fu_money = fu_volume * price
+                fu_money = fu_volume * price
             self.update_fu_price(breed.breed, price)
             self.fu_pools[breed.breed].save(fu_volume)
             self.adjust_margin_pool()
@@ -713,27 +731,33 @@ class futureAccount(unFeeAaccount):
         try:
             assert breed.breed in self.fu_pools.keys()
             self.update_fu_price(breed.breed, price)
-            if self.check_cash() == 0:
-                raise ValueError("We are broken!")
             rate = round(1 - rate, accuracy)
             volume = self.fu_pools[breed.breed].volume * rate
             volume = volume if breed.unit == 0 else volume // breed.unit * breed.unit
             money = volume * price
             self.fu_pools[breed.breed].withdraw(volume)
             self.adjust_margin_pool()
+            if self.check_cash() == 0:
+                raise ValueError
             self.buy(self.pools["fee"].breed, money, self.pools["fee"].price)
 
         except AssertionError:
+            cash = self.check_cash()
             poo = shortSellPool(breed, price)
             self.fu_pools[breed.breed] = poo
             rate = round(1 - rate, accuracy)
-            margin_rate = self.pools["margin"].price
+            margin_rate = self.margin_rate
             volume = round(self.check_cash() * rate / price / margin_rate, accuracy)
             volume = volume if breed.unit == 0 else volume // breed.unit * breed.unit
             money = volume * price
+            if cash < money * (margin_rate + self.pools["fee"].price):
+                volume -= breed.unit
+                money = volume * price
             poo.withdraw(volume)
             self.adjust_margin_pool()
             self.buy(self.pools["fee"].breed, money, self.pools["fee"].price)
+        except ValueError:
+            raise ValueError("We are broken!")
         finally:
             if self.fu_pools[breed.breed].volume == 0:
                 del self.fu_pools[breed.breed]
@@ -759,7 +783,7 @@ class futureAccount(unFeeAaccount):
         margin = 0
         for bree in self.fu_pools.keys():
             margin += abs(self.fu_pools[bree].cash_value)
-        self.handle_to_amount(self.margin_breed, margin, self.pools["margin"].price)
+        self.handle_to_amount(self.margin_breed, margin, self.margin_rate)
 
     def adjust_idle_cash(self, orin_return: float):
         fu_return = self.cal_fu_return()
@@ -779,10 +803,11 @@ if __name__ == "__main__":
     acc = futureAccount(2000000)
     print(acc.portfolio_value)
     acc.buy_to_rate(breed_CF, 0.5, 5000.0)
-    acc.sell_to_rate(breed_CH, 0.5, 5000)
-    acc.update_fu_price(breed_CF.breed, 5200)
-    acc.update_fu_price(breed_CH.breed, 1800)
-    acc.order_to_rate(breed_CH, 0, 1800)
+    # acc.sell_to_rate(breed_CF, 0, 5000)
+    # acc.update_fu_price(breed_CF.breed, 5200)
+    # acc.update_fu_price(breed_CH.breed, 1800)
+    acc.order_to_rate(breed_CF, 0, 5000)
+    acc.buy_to_rate(breed_CF, 0.5, 5000.0)
     print(acc.portfolio_value)
     print(acc.get_pools_df())
     print(acc.pfo_return)

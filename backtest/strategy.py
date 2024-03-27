@@ -182,7 +182,7 @@ class strategy:
         self.pfo_returns = []
         self.weight = torch.tensor([-0.5, -0.2, 0.0, 0.2, 0.5], dtype=torch.float32)
         self.account = futureAccount(
-            base_currency=10000000, current_date=f"{split_date}"
+            base_currency=10000000, current_date=f"{split_date}", fu_pools={}
         )
         self.start_date = self.account.current_date
 
@@ -198,6 +198,7 @@ class strategy:
                 self.account.update_date(1)
             price = self.orin_data.loc[i, ["close"]].item()
             self.daily_settle(price)
+            # print(111111, self.account.fu_pools)
             self.portfolio_values.append(self.account.portfolio_value)
             self.pfo_returns.append(self.account.pfo_return / self.account.base)
             if (i) >= self.seq_len and i <= len(self.orin_data) - 1:
@@ -222,7 +223,7 @@ class strategy:
         self.end_date = self.account.current_date
 
     def daily_settle(self, current_price: float):
-        if self.account.pools:
+        if self.account.fu_pools:
             old_return = self.account.pfo_return
             self.account.order_to_rate(self.breed, 0, current_price)
             returns = self.account.pfo_return

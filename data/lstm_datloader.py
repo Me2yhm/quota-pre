@@ -114,12 +114,14 @@ def lstm_data(
     data_path = Path(__file__).parent / f"{code}_{datype}_data.csv"
     if os.path.exists(data_path):
         data = pd.read_csv(data_path)
+        data_loader = get_labled_data(data, seq_len, batch_size, shuffle)
     else:
         if datype == "train":
             data, _ = make_data(code, split_data)
+            data_loader = get_labled_data(data, seq_len, batch_size, shuffle)
         else:
             _, data = make_data(code, split_data)
-    data_loader = get_labled_data(data, seq_len, batch_size, shuffle)
+            data_loader = get_labled_data(data, seq_len, batch_size, shuffle, False)
     return data_loader
 
 

@@ -21,7 +21,7 @@ model_path = Path(__file__).parent / f"vgg_lstm_model_{code}.pth"
 if if_agg:
     model_path = Path(__file__).parent / "vgg_lstm_model_agg.pth"
     print("---------------test agg model---------------")
-test_data = lstm_test_data(code, batch_size, seq_len, split_data=split_date)
+test_data = lstm_test_data(code, batch_size, seq_len, False, split_data=split_date)
 # criterion = torch.nn.MSELoss(reduction="sum")
 criterion = CustomLoss()
 model = VGG_LSTM(class_num, input_dim, seq_len, hidden_dim)
@@ -41,7 +41,6 @@ with torch.no_grad():
             max_ind = y_pred[i].argmax()
             pred[i][max_ind] = 1
         correct += (pred.data == target.data).all(dim=1).sum()
-
 test_loss /= n  # 平均损失
 accuracy = 100.0 * correct / len(test_data.dataset)  # 计算准确率
 print(f"---------------test subject {code}-------------------")
