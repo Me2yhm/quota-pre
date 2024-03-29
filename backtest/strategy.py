@@ -12,7 +12,7 @@ import lightgbm as lgb
 
 import sys
 
-sys.path.append("E:\\workspace\\quota-pre\\")
+sys.path.append(str(Path(__file__).parent.parent))
 
 from backtest.schema import BREED, futureAccount
 from data.lstm_datloader import (
@@ -117,7 +117,13 @@ def execut_signal(
     price: float,
 ):
     volumes_rate = (unilize(signals) * weight).sum().item()
+    # volume_rate 大于0和小于0时 order_to_rate的处理逻辑有所区别
+    volumes_rate = volumes_rate if volumes_rate >= 0 else -(1 + volumes_rate)
+    print(
+        f"-----rate:{volumes_rate},price:{price},pools:{account.pools},fu:{account.fu_pools}-----"
+    )
     account.order_to_rate(breed, volumes_rate, price)
+    print(f"-----pools:{account.pools},fu:{account.fu_pools}-----")
 
 
 def generate_signal(data, model):
@@ -198,7 +204,6 @@ class strategy:
                 self.account.update_date(1)
             price = self.orin_data.loc[i, ["close"]].item()
             self.daily_settle(price)
-            # print(111111, self.account.fu_pools)
             self.portfolio_values.append(self.account.portfolio_value)
             self.pfo_returns.append(self.account.pfo_return / self.account.base)
             if (i) >= self.seq_len and i <= len(self.orin_data) - 1:

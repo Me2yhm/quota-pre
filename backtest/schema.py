@@ -1,6 +1,5 @@
 import math
 from datetime import datetime, timedelta
-from collections import defaultdict
 from abc import ABC, abstractmethod
 import os
 from pathlib import Path
@@ -8,6 +7,10 @@ from typing import Literal, TypedDict
 
 
 import pandas as pd
+
+import sys
+
+sys.path.append(str(Path(__file__).parent.parent))
 
 from utils import lcm_float, read_env
 
@@ -649,10 +652,12 @@ class unFeeAaccount(baseAccount):
                 code = self.buy_to_rate(breed, rate, price)
             else:
                 code = self.sell_to_rate(breed, -rate, price)
-        except AssertionError:
-            print("Warning: order rate must belong to [0,1]")
-        finally:
             return code
+        except AssertionError:
+            print("Warning: order rate must belong to [-1,1]")
+            return code
+        except ValueError:
+            raise ValueError("We are broken")
 
     def cal_portfolio_value(self):
         porfolio_value = 0
@@ -679,11 +684,8 @@ class futureAccount(unFeeAaccount):
         margin_poo = currencyPool("margin", margin)
         self.margin_breed = margin_poo.breed
         self.margin_rate = margin
-        margin_poo.save(sum([fu.cash_value for fu in fu_pools.values()]))
-        self.handle_cash(margin_poo.cash_value)
+        margin_poo.save(sum([abs(fu.cash_value) for fu in fu_pools.values()]))
         fee_poo = feePool("fee", overtoday_fee)
-        fee_poo.save(sum([fu.cash_value for fu in fu_pools.values()]))
-        self.handle_cash(fee_poo.cash_value)
         self.pools["margin"] = margin_poo
         self.pools["fee"] = fee_poo
         self.current_date = current_date
@@ -722,6 +724,12 @@ class futureAccount(unFeeAaccount):
             self.adjust_margin_pool()
             self.buy(self.pools["fee"].breed, fu_money, self.pools["fee"].price)
 
+        except ValueError as e:
+            raise e
+
+        except AssertionError as e:
+            raise e
+
         finally:
             if self.fu_pools[breed.breed].volume == 0:
                 del self.fu_pools[breed.breed]
@@ -738,8 +746,8 @@ class futureAccount(unFeeAaccount):
             self.fu_pools[breed.breed].withdraw(volume)
             self.adjust_margin_pool()
             if self.check_cash() == 0:
-                raise ValueError
-            self.buy(self.pools["fee"].breed, money, self.pools["fee"].price)
+                raise ValueError("We are broken")
+            self.buy(self.pools["fee"].breed, abs(money), self.pools["fee"].price)
 
         except AssertionError:
             cash = self.check_cash()
@@ -788,6 +796,8 @@ class futureAccount(unFeeAaccount):
     def adjust_idle_cash(self, orin_return: float):
         fu_return = self.cal_fu_return()
         amount = self.check_cash() + fu_return - orin_return
+        if amount < 0:
+            raise ValueError("We are broken!")
         self.pools["base_currency"].handle_to(amount)
 
     def cal_fu_return(self):
@@ -798,16 +808,13 @@ class futureAccount(unFeeAaccount):
 
 
 if __name__ == "__main__":
-    breed_CF = BREED("CF", 200, True)
-    breed_CH = BREED("CH", 300, True)
-    acc = futureAccount(2000000)
-    print(acc.portfolio_value)
-    acc.buy_to_rate(breed_CF, 0.5, 5000.0)
-    # acc.sell_to_rate(breed_CF, 0, 5000)
-    # acc.update_fu_price(breed_CF.breed, 5200)
-    # acc.update_fu_price(breed_CH.breed, 1800)
-    acc.order_to_rate(breed_CF, 0, 5000)
-    acc.buy_to_rate(breed_CF, 0.5, 5000.0)
+    breed_CH = BREED("IH.CFX", 300, True)
+    fu_pools = {breed_CH.breed: shortSellPool(breed_CH, 2271.2, -60600)}
+    acc = futureAccount(1658139.6356800005, fu_pools)
+    print(acc.fu_pools)
+    print(acc.get_pools_df())
+    acc.order_to_rate(breed_CH, 0.0, 2110.0)
+
     print(acc.portfolio_value)
     print(acc.get_pools_df())
     print(acc.pfo_return)
