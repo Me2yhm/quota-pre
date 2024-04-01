@@ -685,9 +685,9 @@ class futureAccount(unFeeAaccount):
         self.margin_breed = margin_poo.breed
         self.margin_rate = margin
         margin_poo.save(sum([abs(fu.cash_value) for fu in fu_pools.values()]))
-        fee_poo = feePool("fee", overtoday_fee)
+        self.fee_poo = feePool("fee", overtoday_fee)
         self.pools["margin"] = margin_poo
-        self.pools["fee"] = fee_poo
+        self.pools["fee"] = self.fee_poo
         self.current_date = current_date
         self.transactions = {}
 
@@ -710,19 +710,19 @@ class futureAccount(unFeeAaccount):
             need_margin = (
                 (fu_volume + self.fu_pools[breed.breed].volume) * price * margin_rate
             )
-            if cash < (fu_money * self.pools["fee"].price + need_margin):
+            if cash < (fu_money * self.fee_poo.price + need_margin):
                 fu_volume -= breed.unit
                 fu_money = fu_volume * price
             self.update_fu_price(breed.breed, price)
             self.fu_pools[breed.breed].save(fu_volume)
             self.adjust_margin_pool()
-            self.buy(self.pools["fee"].breed, fu_money, self.pools["fee"].price)
+            self.buy(self.fee_poo.breed, fu_money, self.fee_poo.price)
 
         except KeyError:
             poo = shortSellPool(breed, price, fu_volume)
             self.fu_pools[breed.breed] = poo
             self.adjust_margin_pool()
-            self.buy(self.pools["fee"].breed, fu_money, self.pools["fee"].price)
+            self.buy(self.fee_poo.breed, fu_money, self.fee_poo.price)
 
         except ValueError as e:
             raise e
@@ -747,7 +747,7 @@ class futureAccount(unFeeAaccount):
             self.adjust_margin_pool()
             if self.check_cash() == 0:
                 raise ValueError("We are broken")
-            self.buy(self.pools["fee"].breed, abs(money), self.pools["fee"].price)
+            self.buy(self.fee_poo.breed, abs(money), self.fee_poo.price)
 
         except AssertionError:
             cash = self.check_cash()
@@ -758,12 +758,12 @@ class futureAccount(unFeeAaccount):
             volume = round(self.check_cash() * rate / price / margin_rate, accuracy)
             volume = volume if breed.unit == 0 else volume // breed.unit * breed.unit
             money = volume * price
-            if cash < money * (margin_rate + self.pools["fee"].price):
+            if cash < money * (margin_rate + self.fee_poo.price):
                 volume -= breed.unit
                 money = volume * price
             poo.withdraw(volume)
             self.adjust_margin_pool()
-            self.buy(self.pools["fee"].breed, money, self.pools["fee"].price)
+            self.buy(self.fee_poo.breed, money, self.fee_poo.price)
         except ValueError:
             raise ValueError("We are broken!")
         finally:

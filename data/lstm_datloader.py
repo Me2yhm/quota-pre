@@ -59,11 +59,16 @@ def data_to_zscore(data: pd.DataFrame) -> pd.DataFrame:
     return data.iloc[1:, :]
 
 
+def read_data(code: str) -> pd.DataFrame:
+    file_path = Path(__file__).parent / f"{code}.csv"
+    fu_dat = pd.read_csv(file_path)
+    return fu_dat
+
+
 def make_data(
     code: str, split_date: int = 20220913
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
-    file_path = Path(__file__).parent / f"{code}.csv"
-    fu_dat = pd.read_csv(file_path)
+    fu_dat = read_data(code)
     data = data_to_zscore(fu_dat)
     train_data = (
         data[data["trade_date"] < split_date]
@@ -83,8 +88,6 @@ def make_data(
 def get_labled_data(
     data: pd.DataFrame,
     seq_len: int,
-    batch_size: int,
-    shuffle: bool = True,
     resample: bool = True,
 ) -> DataLoader:
     ros = SMOTE(k_neighbors=2)
@@ -98,6 +101,12 @@ def get_labled_data(
         x, y = ros.fit_resample(x, y)
     x = torch.tensor(x, dtype=torch.float32).view(-1, seq_len, input_dim)
     y = torch.tensor(y, dtype=torch.float32)
+    return x, y
+
+
+def make_data_loader(
+    x: torch.Tensor, y: torch.Tensor, batch_size: int, shuffle: bool = True
+):
     dataset = TensorDataset(x, y)
     data_loader = DataLoader(dataset, batch_size=batch_size, shuffle=shuffle)
     return data_loader
@@ -109,19 +118,31 @@ def lstm_data(
     seq_len: int,
     datype: Literal["train", "test"],
     shuffle: bool = True,
-    split_data: int = 20220913,
+    split_date: int = 20220913,
 ) -> DataLoader:
     data_path = Path(__file__).parent / f"{code}_{datype}_data.csv"
     if os.path.exists(data_path):
         data = pd.read_csv(data_path)
-        data_loader = get_labled_data(data, seq_len, batch_size, shuffle)
+        x, y = get_labled_data(data, seq_len)
+        data_loader = make_data_loader(x, y, batch_size, shuffle)
     else:
         if datype == "train":
-            data, _ = make_data(code, split_data)
-            data_loader = get_labled_data(data, seq_len, batch_size, shuffle)
+            data, _ = make_data(code, split_date)
+            x, y = get_labled_data(data, seq_len)
+            data_loader = make_data_loader(x, y, batch_size, shuffle)
         else:
-            _, data = make_data(code, split_data)
-            data_loader = get_labled_data(data, seq_len, batch_size, shuffle, False)
+            data = read_data(code)
+            data = data_to_zscore(data)
+            split_index = data.index[data["trade_date"] == split_date][0] - len(
+                data.index
+            )
+            data.drop(columns=["trade_date"], inplace=True)
+            x, y = get_labled_data(data, seq_len, resample=False)
+            print(x.shape, split_index)
+            data_loader = make_data_loader(
+                x[split_index:], y[split_index:], batch_size, False
+            )
+
     return data_loader
 
 
@@ -131,9 +152,9 @@ def make_seqs(seq_len: int, data: torch.Tensor):
 
 
 def lstm_train_data(
-    code: str, batch_size: int, seq_len: int, split_data: int = 20220913
+    code: str, batch_size: int, seq_len: int, split_date: int = 20220913
 ):
-    return lstm_data(code, batch_size, seq_len, "train", split_data=split_data)
+    return lstm_data(code, batch_size, seq_len, "train", split_data=split_date)
 
 
 def lstm_test_data(
@@ -141,10 +162,10 @@ def lstm_test_data(
     batch_size: int,
     seq_len: int,
     shuffle: bool = True,
-    split_data: int = 20220913,
+    split_date: int = 20220913,
 ):
     return lstm_data(
-        code, batch_size, seq_len, "test", shuffle=shuffle, split_data=split_data
+        code, batch_size, seq_len, "test", shuffle=shuffle, split_date=split_date
     )
 
 

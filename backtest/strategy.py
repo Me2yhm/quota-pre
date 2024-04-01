@@ -85,7 +85,7 @@ def make_pre_data(test_data: pd.DataFrame) -> torch.Tensor:
         features.iloc[:, i] = cal_zscore(returns.iloc[:, i - 1].values)
     for i in range(22, 53):
         features.iloc[:, i] = cal_zscore(indicaters.iloc[:, i - 26].values)
-    test_data = features[features["trade_date"] >= split_date].reset_index(drop=True)
+    # test_data = features[features["trade_date"] >= split_date].reset_index(drop=True)
     features = test_data.iloc[:, 1:]
     features = torch.tensor(features.values, dtype=torch.float32)
     return features
@@ -94,8 +94,11 @@ def make_pre_data(test_data: pd.DataFrame) -> torch.Tensor:
 def make_vgg_data(code: str, seq_len: int) -> torch.Tensor:
     file_path = root_path.parent / f"data/{code}.csv"
     test_data = pd.read_csv(file_path)
+    split_index = test_data.index[test_data["trade_date"] == split_date][0] - len(
+        test_data.index
+    )
     features = make_pre_data(test_data)
-    features = make_seqs(seq_len, features)
+    features = make_seqs(seq_len, features)[split_index:]
     return features
 
 
@@ -119,11 +122,13 @@ def execut_signal(
     volumes_rate = (unilize(signals) * weight).sum().item()
     # volume_rate 大于0和小于0时 order_to_rate的处理逻辑有所区别
     volumes_rate = volumes_rate if volumes_rate >= 0 else -(1 + volumes_rate)
-    print(
-        f"-----rate:{volumes_rate},price:{price},pools:{account.pools},fu:{account.fu_pools}-----"
-    )
+    # print(
+    #     f"-----rate:{volumes_rate},price:{price},pools:{account.pools},return:{account.pfo_return},fu:{account.fu_pools}-----"
+    # )
     account.order_to_rate(breed, volumes_rate, price)
-    print(f"-----pools:{account.pools},fu:{account.fu_pools}-----")
+    # print(
+    #     f"-----pools:{account.pools},return:{account.pfo_return},fu:{account.fu_pools}-----"
+    # )
 
 
 def generate_signal(data, model):
@@ -174,7 +179,6 @@ class strategy:
         update: bool = False,
     ) -> None:
         self.breed = breed_dic[code]
-        self.pre_times = 0
         self.model = model
         self.signals = None
         self.has_signal = False
@@ -206,20 +210,14 @@ class strategy:
             self.daily_settle(price)
             self.portfolio_values.append(self.account.portfolio_value)
             self.pfo_returns.append(self.account.pfo_return / self.account.base)
-            if (i) >= self.seq_len and i <= len(self.orin_data) - 1:
-                self.signals = signal_gerater(
-                    self.test_data[self.pre_times], self.model
-                )
-                self.pre_times += 1
-                if self.pre_times - (2 * self.seq_len) > 0 and self.update:
-                    if (self.pre_times - (2 * self.seq_len)) % 30 == 0:
-                        data = data_fuc(
-                            self.orin_data[i - 2 * self.seq_len - 2 : i].reset_index(
-                                drop=True
-                            )
-                        )
-                        self.update_model(update_fuc, data)
-                self.has_signal = True
+            self.signals = signal_gerater(self.test_data[i], self.model)
+            if i - (self.seq_len) > 0 and self.update:
+                if (i - (self.seq_len)) % 30 == 0:
+                    data = data_fuc(
+                        self.orin_data[i - self.seq_len - 2 : i].reset_index(drop=True)
+                    )
+                    self.update_model(update_fuc, data)
+            self.has_signal = True
             if self.has_signal:
                 execut_signal(
                     self.breed, self.account, self.weight, self.signals, price
@@ -341,7 +339,7 @@ if __name__ == "__main__":
     sharps = list(
         map(
             calculate_sharpe_ratio,
-            [vgg_lstm_result[seq_len:], gbdt_result[seq_len:], random_result[seq_len:]],
+            [vgg_lstm_result, gbdt_result, random_result],
         )
     )
     drowdowns = list(
