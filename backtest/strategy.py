@@ -87,7 +87,7 @@ def make_pre_data(test_data: pd.DataFrame) -> torch.Tensor:
     for i in range(22, 53):
         features.iloc[:, i] = cal_zscore(indicaters.iloc[:, i - 26].values)
     # test_data = features[features["trade_date"] >= split_date].reset_index(drop=True)
-    features = test_data.iloc[:, 1:]
+    features = features.iloc[:, 1:]
     features = torch.tensor(features.values, dtype=torch.float32)
     return features
 
