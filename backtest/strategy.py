@@ -20,6 +20,7 @@ from data.lstm_datloader import (
     data_to_zscore,
     get_labled_data,
     make_data,
+    make_data_loader,
     make_seqs,
 )
 from model.vgg_lstm import VGG_LSTM
@@ -94,11 +95,8 @@ def make_pre_data(test_data: pd.DataFrame) -> torch.Tensor:
 def make_vgg_data(code: str, seq_len: int) -> torch.Tensor:
     file_path = root_path.parent / f"data/{code}.csv"
     test_data = pd.read_csv(file_path)
-    split_index = test_data.index[test_data["trade_date"] == split_date][0] - len(
-        test_data.index
-    )
     features = make_pre_data(test_data)
-    features = make_seqs(seq_len, features)[split_index:]
+    features = make_seqs(seq_len, features)
     return features
 
 
@@ -152,7 +150,8 @@ def gbdt_update_model(code: str, seq_len: int) -> Callable:
 
 def lstm_updata_fuc(orin_data: pd.DataFrame, seq_len: int, batch_size: int):
     data = data_to_zscore(orin_data).drop(columns=["trade_date"]).reset_index(drop=True)
-    dataloader = get_labled_data(data, seq_len, batch_size, resample=False)
+    x, y = get_labled_data(data, seq_len, resample=True)
+    dataloader = make_data_loader(x, y, batch_size)
     return dataloader
 
 
@@ -195,6 +194,12 @@ class strategy:
             base_currency=10000000, current_date=f"{split_date}", fu_pools={}
         )
         self.start_date = self.account.current_date
+        file_path = root_path.parent / f"data/{code}.csv"
+        fu_data = pd.read_csv(file_path)
+        self.split_index = fu_data.index[fu_data["trade_date"] == split_date][0] - len(
+            fu_data.index
+        )
+        self.fu_dat = fu_data
 
     def excute_stratgy(
         self,
@@ -210,11 +215,16 @@ class strategy:
             self.daily_settle(price)
             self.portfolio_values.append(self.account.portfolio_value)
             self.pfo_returns.append(self.account.pfo_return / self.account.base)
-            self.signals = signal_gerater(self.test_data[i], self.model)
+            self.signals = signal_gerater(
+                self.test_data[i + self.split_index], self.model
+            )
             if i - (self.seq_len) > 0 and self.update:
                 if (i - (self.seq_len)) % 30 == 0:
+                    j = i + self.split_index
                     data = data_fuc(
-                        self.orin_data[i - self.seq_len - 2 : i].reset_index(drop=True)
+                        self.fu_dat.iloc[
+                            self.split_index - 2 * self.seq_len : j + 1
+                        ].reset_index(drop=True)
                     )
                     self.update_model(update_fuc, data)
             self.has_signal = True
@@ -307,7 +317,7 @@ def gbdt_strategy(code: str, seq_len: int):
 
 
 def random_strategy(code: str, seq_len: int):
-    test_data = make_gbdt_data(code, seq_len)
+    test_data = make_gbdt_data(code, seq_len).iloc
     executer = strategy(code, seq_len, test_data)
     executer.excute_stratgy(random_gener)
     portfolio_values = executer.portfolio_values

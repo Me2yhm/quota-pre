@@ -5,7 +5,7 @@ import lightgbm as lgb
 import pandas as pd
 from sklearn.metrics import accuracy_score
 from imblearn.over_sampling import RandomOverSampler
-from data.lstm_datloader import make_data, tag_zs
+from data.lstm_datloader import get_test_data, make_data, tag_zs
 from utils import read_env
 
 num_round = 10
@@ -55,7 +55,8 @@ def split_data(
     split_date: int = 20220913,
 ):
     # 重采样
-    train_data, test_data = make_data(code, split_date)
+    train_data, _ = make_data(code, split_date)
+    test_data = get_test_data(code, split_date, windows)
     x_train, y_train = gbdt_labled_data(train_data, windows, resample)
     x_test, y_test = gbdt_labled_data(test_data, windows, resample)
     return x_train, y_train, x_test, y_test

@@ -56,7 +56,7 @@ def data_to_zscore(data: pd.DataFrame) -> pd.DataFrame:
         [features.iloc[:-1, :], pcg_df.iloc[1:, :].reset_index(drop=True)],
         axis=1,
     )
-    return data.iloc[1:, :]
+    return data.iloc[1:, :].reset_index(drop=True)
 
 
 def read_data(code: str) -> pd.DataFrame:
@@ -89,7 +89,7 @@ def get_labled_data(
     data: pd.DataFrame,
     seq_len: int,
     resample: bool = True,
-) -> DataLoader:
+) -> tuple[torch.Tensor]:
     ros = SMOTE(k_neighbors=2)
     x = torch.tensor(data.iloc[:, :-1].to_numpy(), dtype=torch.float32)
     y = mark_zscore(data.iloc[:, -1].values)
@@ -110,6 +110,15 @@ def make_data_loader(
     dataset = TensorDataset(x, y)
     data_loader = DataLoader(dataset, batch_size=batch_size, shuffle=shuffle)
     return data_loader
+
+
+def get_test_data(code: str, split_date: int, seq_len: int):
+    data = read_data(code)
+    data = data_to_zscore(data)
+    split_index = data.index[data["trade_date"] == split_date][0] - len(data.index)
+    data.drop(columns=["trade_date"], inplace=True)
+    data = data.iloc[split_index - seq_len + 1 :]
+    return data
 
 
 def lstm_data(
@@ -138,7 +147,6 @@ def lstm_data(
             )
             data.drop(columns=["trade_date"], inplace=True)
             x, y = get_labled_data(data, seq_len, resample=False)
-            print(x.shape, split_index)
             data_loader = make_data_loader(
                 x[split_index:], y[split_index:], batch_size, False
             )
