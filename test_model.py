@@ -1,7 +1,7 @@
 import torch
 import os
 from pathlib import Path
-from data.lstm_datloader import lstm_test_data
+from data.lstm_datloader import make_vgg_test_data
 from model.vgg_lstm import VGG_LSTM
 from train_model import CustomLoss
 from utils import read_env
@@ -21,7 +21,7 @@ model_path = Path(__file__).parent / f"vgg_lstm_model_{code}.pth"
 if if_agg:
     model_path = Path(__file__).parent / "vgg_lstm_model_agg.pth"
     print("---------------test agg model---------------")
-test_data = lstm_test_data(code, batch_size, seq_len, False, split_date=split_date)
+test_data = make_vgg_test_data(code, split_date, seq_len, batch_size)
 # criterion = torch.nn.MSELoss(reduction="sum")
 criterion = CustomLoss()
 model = VGG_LSTM(class_num, input_dim, seq_len, hidden_dim)
@@ -34,6 +34,7 @@ with torch.no_grad():
     for data, target in test_data:
         n += 1
         y_pred = model(data)
+        print(y_pred.data)
         pred = torch.zeros_like(y_pred)
         batch_num = y_pred.size(0)
         test_loss += criterion(y_pred, target).item()  # 累加测试集上的损失

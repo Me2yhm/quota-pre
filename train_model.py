@@ -5,7 +5,7 @@ import torch
 from torch.utils.data import DataLoader
 from torch.optim.optimizer import Optimizer
 
-from data.lstm_datloader import lstm_train_data
+from data.lstm_datloader import make_vgg_train_data
 from model.vgg_lstm import VGG_LSTM
 from utils import read_env
 
@@ -144,28 +144,22 @@ def update_vgg_lstm(
 
 
 def mk_vgg_lstm_model(
-    code: str, batch_size: int, seq_len: int, split_data: int = 20220913
+    code: str, batch_size: int, seq_len: int, split_date: int = 20220913
 ):
-    data = lstm_train_data(code, batch_size, seq_len, split_data=split_data)
+    data = make_vgg_train_data(code, split_date, seq_len, batch_size)
     model = VGG_LSTM(class_num, input_dim, seq_len, hidden_dim, 1)
     optimizer = torch.optim.Adam(model.parameters(), lr=5e-3)
     criterion = CustomLoss()
     return train_vgg_lstm(model, data, optimizer, criterion, code, 100)
 
 
-def agg_data_train(batch_size: int, seq_len: int, split_data: int = 20220913):
+def agg_data_train(batch_size: int, seq_len: int, split_date: int = 20220913):
     from torch.utils.data import DataLoader, ConcatDataset
 
     print("----------train agg model----------")
-    data1 = lstm_train_data(
-        codes[0], batch_size, seq_len, split_data=split_data
-    ).dataset
-    data2 = lstm_train_data(
-        codes[1], batch_size, seq_len, split_data=split_data
-    ).dataset
-    data3 = lstm_train_data(
-        codes[2], batch_size, seq_len, split_data=split_data
-    ).dataset
+    data1 = make_vgg_train_data(code[0], split_date, seq_len, batch_size).dataset
+    data2 = make_vgg_train_data(code[1], split_date, seq_len, batch_size).dataset
+    data3 = make_vgg_train_data(code[2], split_date, seq_len, batch_size).dataset
     combined_dataset = ConcatDataset([data1, data2, data3])
     data = DataLoader(combined_dataset, batch_size=batch_size, shuffle=True)
     model = VGG_LSTM(class_num, input_dim, seq_len, hidden_dim, 1)
@@ -177,6 +171,6 @@ def agg_data_train(batch_size: int, seq_len: int, split_data: int = 20220913):
 if __name__ == "__main__":
     print(f"----------train subject {code}----------")
     if if_agg:
-        agg_data_train(batch_size, seq_len, split_data=split_date)
+        agg_data_train(batch_size, seq_len, split_date=split_date)
     else:
-        model = mk_vgg_lstm_model(code, batch_size, seq_len, split_data=split_date)
+        model = mk_vgg_lstm_model(code, batch_size, seq_len, split_date=split_date)

@@ -18,13 +18,11 @@ from backtest.schema import BREED, futureAccount
 from data.lstm_datloader import (
     cal_zscore,
     data_to_zscore,
-    get_labled_data,
-    make_data,
-    make_data_loader,
+    gbdt_test_data,
     make_seqs,
 )
 from model.vgg_lstm import VGG_LSTM
-from gbdt import split_data, train_gbdt
+from gbdt import train_gbdt
 from train_model import mk_vgg_lstm_model, update_vgg_lstm
 from utils import (
     calculate_max_drawdown,
@@ -61,15 +59,6 @@ class tradeSignal:
     HARD_SELL: float = -0.5
 
 
-def read_data(code: str) -> pd.DataFrame:
-    data_path = root_path.parent / f"data/{code}_test_data.csv"
-    if os.path.exists(data_path):
-        test_data = pd.read_csv(data_path)
-    else:
-        _, test_data = make_data(code)
-    return test_data
-
-
 def read_orin_data(code: str) -> pd.DataFrame:
     file_path = root_path.parent / f"data/{code}.csv"
     fu_dat = pd.read_csv(file_path)
@@ -85,8 +74,7 @@ def make_pre_data(test_data: pd.DataFrame) -> torch.Tensor:
     for i in range(1, 22):
         features.iloc[:, i] = cal_zscore(returns.iloc[:, i - 1].values)
     for i in range(22, 53):
-        features.iloc[:, i] = cal_zscore(indicaters.iloc[:, i - 26].values)
-    # test_data = features[features["trade_date"] >= split_date].reset_index(drop=True)
+        features.iloc[:, i] = cal_zscore(indicaters.iloc[:, i - 22].values)
     features = features.iloc[:, 1:]
     features = torch.tensor(features.values, dtype=torch.float32)
     return features
@@ -100,8 +88,8 @@ def make_vgg_data(code: str, seq_len: int) -> torch.Tensor:
     return features
 
 
-def make_gbdt_data(code: str, seq_len: int):
-    _, _, test_data, _ = split_data(code, seq_len, False)
+def make_gbdt_data(code: str, seq_len: int, split_date: int):
+    test_data, _ = gbdt_test_data(code, split_date, seq_len)
     return test_data.ffill()
 
 
@@ -150,9 +138,10 @@ def gbdt_update_model(code: str, seq_len: int) -> Callable:
 
 def lstm_updata_fuc(orin_data: pd.DataFrame, seq_len: int, batch_size: int):
     data = data_to_zscore(orin_data).drop(columns=["trade_date"]).reset_index(drop=True)
-    x, y = get_labled_data(data, seq_len, resample=True)
-    dataloader = make_data_loader(x, y, batch_size)
-    return dataloader
+    # x, y = get_labled_data(data, seq_len, resample=True)
+    # dataloader = make_data_loader(x, y, batch_size)
+    # return dataloader
+    pass
 
 
 class strategy:
@@ -249,7 +238,7 @@ class strategy:
                 self.odds["loss"].append(abs(intrest))
 
     def update_model(self, update_fuc: Callable, data):
-        update_fuc(self.model, data)
+        # update_fuc(self.model, data)
         pass
 
 
@@ -299,11 +288,11 @@ def random_gener(data, model) -> torch.Tensor:
     return torch.randn(5)
 
 
-def gbdt_strategy(code: str, seq_len: int):
+def gbdt_strategy(code: str, seq_len: int, split_date: int):
     model_path = root_path.parent / f"{code}_gbdt_model.txt"
     model = lgb.Booster(model_file=model_path).predict
     update_fuc = gbdt_update_model(code, seq_len)
-    test_data = make_gbdt_data(code, seq_len).iloc
+    test_data = make_gbdt_data(code, seq_len, split_date).iloc
     executer = strategy(code, seq_len, test_data, model)
     executer.excute_stratgy(gbdt_sig_gener, update_fuc)
     portfolio_values = executer.portfolio_values
@@ -316,8 +305,8 @@ def gbdt_strategy(code: str, seq_len: int):
     return [v / portfolio_values[0] for v in portfolio_values], win_rate, odds
 
 
-def random_strategy(code: str, seq_len: int):
-    test_data = make_gbdt_data(code, seq_len).iloc
+def random_strategy(code: str, seq_len: int, split_date: int):
+    test_data = make_gbdt_data(code, seq_len, split_date).iloc
     executer = strategy(code, seq_len, test_data)
     executer.excute_stratgy(random_gener)
     portfolio_values = executer.portfolio_values
@@ -343,8 +332,8 @@ if __name__ == "__main__":
         lambda x: str(x)[2:4] + "-" + str(x)[4:6] + "-" + str(x)[6:]
     )
     vgg_lstm_result, lstm_wrate, lstm_odds = vgg_lstm_strategy(code, seq_len, if_agg)
-    gbdt_result, gbdt_wrate, gbdt_odds = gbdt_strategy(code, seq_len)
-    random_result, rand_wrate, rand_odds = random_strategy(code, seq_len)
+    gbdt_result, gbdt_wrate, gbdt_odds = gbdt_strategy(code, seq_len, split_date)
+    random_result, rand_wrate, rand_odds = random_strategy(code, seq_len, split_date)
     bench_result = list(bench_mark(code).values)
     sharps = list(
         map(

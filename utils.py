@@ -102,7 +102,7 @@ def float_division(x, y) -> float:
 if __name__ == "__main__":
     path = Path(__file__).parent
     batch_size = 64
-    input_dim = 63
+    input_dim = 64
     hidden_dim = 100
     seq_len = 50
     num_layers = 1
