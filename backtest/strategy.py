@@ -16,6 +16,7 @@ sys.path.append(str(Path(__file__).parent.parent))
 
 from backtest.schema import BREED, futureAccount
 from data.lstm_datloader import (
+    add_target,
     cal_zscore,
     data_to_zscore,
     gbdt_test_data,
@@ -73,19 +74,24 @@ def make_pre_data(test_data: pd.DataFrame) -> torch.Tensor:
     indicaters = features.iloc[:, 22:].astype(float)
     for i in range(1, 22):
         features.iloc[:, i] = cal_zscore(returns.iloc[:, i - 1].values)
-    for i in range(22, 53):
+    for i in range(22, len(features.columns)):
         features.iloc[:, i] = cal_zscore(indicaters.iloc[:, i - 22].values)
     features = features.iloc[:, 1:]
+    features = add_target(features)
     features = torch.tensor(features.values, dtype=torch.float32)
-    return features
+    return features[1:]
 
 
 def make_vgg_data(code: str, seq_len: int) -> torch.Tensor:
     file_path = root_path.parent / f"data/{code}.csv"
     test_data = pd.read_csv(file_path)
+    split_index = test_data.index[test_data["trade_date"] == split_date][0] - len(
+        test_data.index
+    )
     features = make_pre_data(test_data)
+
     features = make_seqs(seq_len, features)
-    return features
+    return features[split_index:]
 
 
 def make_gbdt_data(code: str, seq_len: int, split_date: int):
@@ -204,9 +210,10 @@ class strategy:
             self.daily_settle(price)
             self.portfolio_values.append(self.account.portfolio_value)
             self.pfo_returns.append(self.account.pfo_return / self.account.base)
-            self.signals = signal_gerater(
-                self.test_data[i + self.split_index], self.model
-            )
+            # self.signals = signal_gerater(
+            #     self.test_data[i + self.split_index], self.model
+            # )
+            self.signals = signal_gerater(self.test_data[i], self.model)
             if i - (self.seq_len) > 0 and self.update:
                 if (i - (self.seq_len)) % 30 == 0:
                     j = i + self.split_index
@@ -243,7 +250,8 @@ class strategy:
 
 
 def lstm_sig_gener(data, model) -> torch.Tensor:
-    print("prediction----", generate_signal(data.unsqueeze(0), model))
+    signal = generate_signal(data.unsqueeze(0), model)
+    print("prediction----", [round(v, 4) for v in signal.squeeze().tolist()])
     return generate_signal(data.unsqueeze(0), model)
 
 

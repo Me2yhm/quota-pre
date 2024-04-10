@@ -1,8 +1,14 @@
 from datetime import date, timedelta
+from pathlib import Path
+from typing import Literal
 
 import tushare as ts
 import pandas as pd
 import talib as ta
+import sys
+
+sys.path.append(str(Path(__file__).parent.parent))
+from utils import split_int_date
 
 
 pro = ts.pro_api()
@@ -161,6 +167,33 @@ def get_fu_etf(fu_code: str) -> pd.DataFrame:
     ).drop(columns=["amount", "ts_code", "change", "pct_chg"])
     etf_dat.columns = ["etf_" + v if v != "trade_date" else v for v in etf_dat.columns]
     return etf_dat
+
+
+def get_fu_minute(
+    fu_code: str,
+    starttime: str = "09:00:00",
+    endtime: str = "15:00:00",
+    add_ind: bool = False,
+    add_etf: bool = False,
+    freq: Literal["1min", "5min", "15min", "30min", "60min"] = "60min",
+) -> pd.DataFrame:
+    start_date = split_int_date(fut_info[fu_code][-2]) + " " + starttime
+    end_date = split_int_date(fut_info[fu_code][-1]) + " " + endtime
+    fu_dat = pro.ft_mins(
+        ts_code=fu_code,
+        freq=freq,
+        start_date=start_date,
+        end_date=end_date,
+    )
+
+
+def get_fu_etf_minute(
+    fu_code: str,
+    starttime: str = "09:00:00",
+    endtime: str = "15:00:00",
+    freq: Literal["1min", "5min", "15min", "30min", "60min"] = "60min",
+) -> pd.DataFrame:
+    pass
 
 
 if __name__ == "__main__":

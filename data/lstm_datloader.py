@@ -56,6 +56,7 @@ def read_daily_data(code: str) -> pd.DataFrame:
 
 
 def add_target(data: pd.DataFrame) -> pd.DataFrame:
+    # 意外发现，再进行一次差分，拟合效果很好
     pcg = list(data["close"].values)
     data["pcg_zscore"] = cal_zscore(pcg)
     return data
@@ -79,7 +80,7 @@ def make_seqs(seq_len: int, data: Iterable) -> torch.Tensor:
 
 def make_seq_dataset(data: pd.DataFrame, seq_len: int) -> TensorDataset:
     x_dat = torch.tensor(data.iloc[:-1, :].to_numpy(), dtype=torch.float32)
-    marked_y = mark_zscore(data.iloc[1:]["pcg_zscore"].values)
+    marked_y = mark_zscore(data.iloc[1:, :]["pcg_zscore"].values)
     y_dat = torch.tensor(marked_y, dtype=torch.float32)
     x = make_seqs(seq_len, x_dat)
     y = make_seqs(seq_len, y_dat)[:, -1, :]
@@ -117,7 +118,7 @@ def make_vgg_train_data(
     code: str, split_date: int, seq_len: int, batch_size, shuffle: bool = True
 ) -> DataLoader:
     fu_dat = read_daily_data(code)
-    split_index = fu_dat.index[fu_dat["trade_date"] == split_date][0] - len(
+    split_index = fu_dat.index[fu_dat["trade_date"] >= split_date][0] - len(
         fu_dat.index
     )
     features = data_to_zscore(fu_dat)

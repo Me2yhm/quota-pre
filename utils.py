@@ -99,17 +99,22 @@ def float_division(x, y) -> float:
     return result_float
 
 
+def split_int_date(date: int) -> str:
+    date = str(date)
+    return date[:4] + "-" + date[4:6] + "-" + date[6:]
+
+
 if __name__ == "__main__":
     path = Path(__file__).parent
     batch_size = 64
     input_dim = 64
     hidden_dim = 100
-    seq_len = 50
+    seq_len = 20
     num_layers = 1
     class_num = 5
-    code = "IH.CFX"
+    code = "IF.CFX"
     if_agg = 0
-    split_date = 20230913
+    split_date = 20240219
     environ = {
         "BATCH_SIZE": str(batch_size),
         "INPUT_DIM": str(input_dim),
