@@ -20,6 +20,7 @@ scipy = "*"
 scikit-learn = "*"
 imbalanced-learn = "*"
 chinese-calendar = "*"
+cython = "*"
 
 [dev-packages]
 pytest = "*"

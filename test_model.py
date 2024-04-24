@@ -41,6 +41,7 @@ with torch.no_grad():
         for i in range(batch_num):
             max_ind = y_pred[i].argmax()
             pred[i][max_ind] = 1
+        print(pred)
         correct += (pred.data == target.data).all(dim=1).sum()
 test_loss /= n  # 平均损失
 accuracy = 100.0 * correct / len(test_data.dataset)  # 计算准确率
