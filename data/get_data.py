@@ -10,7 +10,7 @@ import sys
 sys.path.append(str(Path(__file__).parent.parent))
 from utils import split_int_date
 
-
+ts.set_token("6812baa952957cd3c40fbf3dc90c8c59ae10e8c235350c9db10245fd")
 pro = ts.pro_api()
 
 today = int(date.today().strftime("%Y%m%d"))

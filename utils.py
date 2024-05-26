@@ -112,9 +112,9 @@ if __name__ == "__main__":
     seq_len = 20
     num_layers = 1
     class_num = 5
-    code = "IF.CFX"
+    code = "IH.CFX"
     if_agg = 0
-    split_date = 20240219
+    split_date = 20240419
     environ = {
         "BATCH_SIZE": str(batch_size),
         "INPUT_DIM": str(input_dim),
